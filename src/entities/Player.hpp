@@ -70,7 +70,7 @@ private:
     static const int MURPHY_UP = 3;
     static const int MURPHY_DOWN = 4;
     
-    static const int TILE_SIZE = 16;
+    static const int TILE_SIZE = 16;  // Fixed back to 16
     static constexpr float ANIMATION_SPEED = 0.15f;
     static constexpr float MOVE_SPEED = 4.0f;
 };
