@@ -6,6 +6,7 @@ add_executable(sdl-supaplex
     entities/Player.cpp
     systems/AssetManager.cpp
     systems/Sprite.cpp
+    systems/BorderSprite.cpp
 )
 
 # Link SDL2 libraries
