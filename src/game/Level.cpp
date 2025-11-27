@@ -30,14 +30,14 @@ Level::~Level() {
 
 void Level::loadTestLevel() {
     // Create border walls
-    for (int x = 0; x < LEVEL_WIDTH; x++) {
+    /*for (int x = 0; x < LEVEL_WIDTH; x++) {
         tiles[0][x] = TileType::WALL;
         tiles[LEVEL_HEIGHT - 1][x] = TileType::WALL;
     }
     for (int y = 0; y < LEVEL_HEIGHT; y++) {
         tiles[y][0] = TileType::WALL;
         tiles[y][LEVEL_WIDTH - 1] = TileType::WALL;
-    }
+    } */
     
     // Add some random walls and infotrons
     tiles[5][10] = TileType::WALL;
