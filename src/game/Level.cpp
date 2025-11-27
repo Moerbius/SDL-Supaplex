@@ -1,14 +1,23 @@
 #include "Level.hpp"
 #include "../systems/AssetManager.hpp"
 
-// Define static constants
+// Define static constants - match exactly what's in the header
 const int Level::LEVEL_WIDTH;
 const int Level::LEVEL_HEIGHT;
 const int Level::TILE_SIZE;
+
 const int Level::SPRITE_EMPTY;
-const int Level::SPRITE_WALL;
 const int Level::SPRITE_INFOTRON;
 const int Level::SPRITE_ZONK;
+const int Level::SPRITE_TERMINAL;
+const int Level::SPRITE_BASE;
+const int Level::SPRITE_EXIT;
+const int Level::SPRITE_BUG;
+const int Level::SPRITE_SIK_SNAK;
+
+const int Level::SPRITE_BORDER_CORNERS;
+const int Level::SPRITE_BORDER_VERTICAL;
+const int Level::SPRITE_BORDER_HORIZONTAL;
 
 Level::Level() {
     // Initialize all tiles as empty
@@ -18,10 +27,11 @@ Level::Level() {
         }
     }
     
-    // Initialize tile sprite
+    // Initialize tile sprite and border sprite
     SDL_Texture* spriteTexture = AssetManager::getInstance().getTexture("sprites");
     if (spriteTexture) {
         tileSprite = Sprite(spriteTexture, SPRITE_EMPTY);
+        borderSprite = BorderSprite(spriteTexture, SPRITE_BORDER_CORNERS);
     }
 }
 
@@ -29,28 +39,26 @@ Level::~Level() {
 }
 
 void Level::loadTestLevel() {
-    // Create border walls
-    /*for (int x = 0; x < LEVEL_WIDTH; x++) {
-        tiles[0][x] = TileType::WALL;
-        tiles[LEVEL_HEIGHT - 1][x] = TileType::WALL;
-    }
+    // Fill entire level with zonks
     for (int y = 0; y < LEVEL_HEIGHT; y++) {
-        tiles[y][0] = TileType::WALL;
-        tiles[y][LEVEL_WIDTH - 1] = TileType::WALL;
+        for (int x = 0; x < LEVEL_WIDTH; x++) {
+            tiles[y][x] = TileType::BASE;
+        }
+    }
+    
+    // Create a small empty area around the player starting position (5, 10)
+    /* for (int y = 9; y <= 11; y++) {
+        for (int x = 4; x <= 6; x++) {
+            if (x >= 0 && x < LEVEL_WIDTH && y >= 0 && y < LEVEL_HEIGHT) {
+                tiles[y][x] = TileType::EMPTY;
+            }
+        }
     } */
     
-    // Add some random walls and infotrons
-    tiles[5][10] = TileType::WALL;
-    tiles[5][11] = TileType::WALL;
-    tiles[5][12] = TileType::WALL;
-    
-    tiles[7][15] = TileType::INFOTRON;
-    tiles[10][20] = TileType::INFOTRON;
-    tiles[8][25] = TileType::INFOTRON;
-    
-    // Add some zonks
-    tiles[6][30] = TileType::ZONK;
-    tiles[8][35] = TileType::ZONK;
+    // Add a few infotrons scattered around
+    if (7 < LEVEL_HEIGHT && 15 < LEVEL_WIDTH) tiles[7][15] = TileType::INFOTRON;
+    if (12 < LEVEL_HEIGHT && 20 < LEVEL_WIDTH) tiles[12][20] = TileType::INFOTRON;
+    if (15 < LEVEL_HEIGHT && 25 < LEVEL_WIDTH) tiles[15][25] = TileType::INFOTRON;
 }
 
 void Level::render(SDL_Renderer* renderer) {
@@ -65,14 +73,29 @@ void Level::render(SDL_Renderer* renderer) {
             
             // Set appropriate sprite ID based on tile type
             switch (tile) {
-                case TileType::WALL:
+                /* case TileType::WALL:
                     tileSprite.setSpriteId(SPRITE_WALL);
-                    break;
+                    break; */
                 case TileType::INFOTRON:
                     tileSprite.setSpriteId(SPRITE_INFOTRON);
                     break;
                 case TileType::ZONK:
                     tileSprite.setSpriteId(SPRITE_ZONK);
+                    break;
+                case TileType::TERMINAL:
+                    tileSprite.setSpriteId(SPRITE_TERMINAL);
+                    break;
+                case TileType::BASE:
+                    tileSprite.setSpriteId(SPRITE_BASE);
+                    break;
+                case TileType::EXIT:
+                    tileSprite.setSpriteId(SPRITE_EXIT);
+                    break;
+                case TileType::BUG:
+                    tileSprite.setSpriteId(SPRITE_BUG);
+                    break;
+                case TileType::SNIK_SNAK:
+                    tileSprite.setSpriteId(SPRITE_SIK_SNAK);
                     break;
                 default:
                     continue;
@@ -83,9 +106,71 @@ void Level::render(SDL_Renderer* renderer) {
     }
 }
 
-void Level::renderRegion(SDL_Renderer* renderer, int startX, int startY, int endX, int endY, float offsetX, float offsetY) {
+void Level::renderBorders(SDL_Renderer* renderer, int startX, int startY, int endX, int endY, float offsetX, float offsetY) {
+    // Render borders for positions outside the 60x24 level area
     for (int y = startY; y < endY; y++) {
         for (int x = startX; x < endX; x++) {
+            // Only render borders outside the level bounds
+            bool isLeftBorder = (x == -1);
+            bool isRightBorder = (x == LEVEL_WIDTH);
+            bool isTopBorder = (y == -1);
+            bool isBottomBorder = (y == LEVEL_HEIGHT);
+            
+            // Skip if this is inside the level and not a border
+            if (!isLeftBorder && !isRightBorder && !isTopBorder && !isBottomBorder) {
+                continue;
+            }
+            
+            int spriteId;
+            int quarter;
+            bool shouldRender = true;
+            
+            // Determine border type and quarter based on position
+            if (isLeftBorder && isTopBorder) {
+                spriteId = SPRITE_BORDER_CORNERS;
+                quarter = 0; // bottom right quarter
+            } else if (isRightBorder && isTopBorder) {
+                spriteId = SPRITE_BORDER_CORNERS;
+                quarter = 1; // bottom left quarter
+            } else if (isLeftBorder && isBottomBorder) {
+                spriteId = SPRITE_BORDER_CORNERS;
+                quarter = 2; // upper right quarter
+            } else if (isRightBorder && isBottomBorder) {
+                spriteId = SPRITE_BORDER_CORNERS;
+                quarter = 3; // upper left quarter
+            } else if (isTopBorder) {
+                spriteId = SPRITE_BORDER_HORIZONTAL;
+                quarter = 2; // top border quarter
+            } else if (isBottomBorder) {
+                spriteId = SPRITE_BORDER_HORIZONTAL;
+                quarter = 0; // bottom border quarter
+            } else if (isLeftBorder) {
+                spriteId = SPRITE_BORDER_VERTICAL;
+                quarter = 0; // left border quarter
+            } else if (isRightBorder) {
+                spriteId = SPRITE_BORDER_VERTICAL;
+                quarter = 1; // right border quarter
+            } else {
+                shouldRender = false;
+            }
+            
+            if (shouldRender) {
+                int renderX = static_cast<int>((x * TILE_SIZE) + offsetX);
+                int renderY = static_cast<int>((y * TILE_SIZE) + offsetY);
+                borderSprite.renderWithSprite(renderer, renderX, renderY, spriteId, quarter);
+            }
+        }
+    }
+}
+
+void Level::renderRegion(SDL_Renderer* renderer, int startX, int startY, int endX, int endY, float offsetX, float offsetY) {
+    // Render borders first
+    renderBorders(renderer, startX, startY, endX, endY, offsetX, offsetY);
+    
+    // Then render level tiles (normal coordinate system)
+    for (int y = startY; y < endY; y++) {
+        for (int x = startX; x < endX; x++) {
+            // Only render tiles within the actual level bounds (60x24)
             if (x < 0 || x >= LEVEL_WIDTH || y < 0 || y >= LEVEL_HEIGHT) {
                 continue;
             }
@@ -99,14 +184,26 @@ void Level::renderRegion(SDL_Renderer* renderer, int startX, int startY, int end
             
             // Set appropriate sprite ID based on tile type
             switch (tile) {
-                case TileType::WALL:
-                    tileSprite.setSpriteId(SPRITE_WALL);
+                case TileType::BASE:
+                    tileSprite.setSpriteId(SPRITE_BASE);
                     break;
                 case TileType::INFOTRON:
                     tileSprite.setSpriteId(SPRITE_INFOTRON);
                     break;
                 case TileType::ZONK:
                     tileSprite.setSpriteId(SPRITE_ZONK);
+                    break;
+                case TileType::TERMINAL:
+                    tileSprite.setSpriteId(SPRITE_TERMINAL);
+                    break;
+                case TileType::EXIT:
+                    tileSprite.setSpriteId(SPRITE_EXIT);
+                    break;
+                case TileType::BUG:
+                    tileSprite.setSpriteId(SPRITE_BUG);
+                    break;
+                case TileType::SNIK_SNAK:
+                    tileSprite.setSpriteId(SPRITE_SIK_SNAK);
                     break;
                 default:
                     continue;
@@ -125,12 +222,13 @@ bool Level::isWalkable(int x, int y) const {
     }
     
     TileType tile = tiles[y][x];
-    return tile == TileType::EMPTY || tile == TileType::INFOTRON;
+    // Add BASE as a walkable tile type
+    return tile == TileType::EMPTY || tile == TileType::INFOTRON || tile == TileType::BASE;
 }
 
 TileType Level::getTile(int x, int y) const {
     if (x < 0 || x >= LEVEL_WIDTH || y < 0 || y >= LEVEL_HEIGHT) {
-        return TileType::WALL;
+        return TileType::HARDWARE_8; // Non-walkable default
     }
     return tiles[y][x];
 }
