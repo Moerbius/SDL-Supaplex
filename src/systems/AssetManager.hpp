@@ -15,8 +15,12 @@ public:
     SDL_Texture* getTexture(const std::string& name);
     bool loadTexture(const std::string& name, const std::string& path);
     
+    // Get texture dimensions
+    int getTextureWidth(const std::string& name);
+    int getTextureHeight(const std::string& name);
+    
     // Sprite sheet info for Supaplex
-    static const int SPRITE_SIZE = 32;     // Changed from 16 to 32
+    static const int SPRITE_SIZE = 16;     // Fixed back to 16
     static const int SPRITES_PER_ROW = 16;
     
 private:
