@@ -8,7 +8,8 @@
 const char* Game::WINDOW_TITLE = "SDL Supaplex";
 
 Game::Game() : window(nullptr), sdlRenderer(nullptr), currentState(GameState::MENU), 
-               isRunning(false), cameraX(0), cameraY(0) {
+               isRunning(false), cameraX(0), cameraY(0), 
+               viewportWidth(0), viewportHeight(0), panelHeight(0) {
 }
 
 Game::~Game() {
@@ -53,6 +54,17 @@ bool Game::initialize() {
         std::cerr << "Failed to initialize AssetManager!" << std::endl;
         return false;
     }
+    
+    // Get panel height from loaded texture
+    panelHeight = AssetManager::getInstance().getTextureHeight("panel");
+    if (panelHeight == 0) {
+        panelHeight = 32; // Fallback value
+        std::cerr << "Warning: Could not get panel height, using default 32px" << std::endl;
+    }
+    
+    // Calculate viewport dimensions to use full window area above panel
+    viewportWidth = WINDOW_WIDTH;
+    viewportHeight = WINDOW_HEIGHT - panelHeight;
     
     // Initialize game objects
     currentLevel = std::make_unique<Level>();
@@ -112,23 +124,24 @@ void Game::update(float deltaTime) {
     }
 }
 
-void Game::updateCamera(float deltaTime) {  // Add deltaTime parameter
+void Game::updateCamera(float deltaTime) {
     if (!player) return;
     
     // Use smooth player position for camera
     float playerPixelX = player->getRenderX() * 16;
     float playerPixelY = player->getRenderY() * 16;
     
-    // Center camera on player
-    float targetCameraX = playerPixelX - (VIEWPORT_WIDTH / 2);
-    float targetCameraY = playerPixelY - (VIEWPORT_HEIGHT / 2);
+    // Center camera on player using dynamic viewport
+    float targetCameraX = playerPixelX - (viewportWidth / 2);
+    float targetCameraY = playerPixelY - (viewportHeight / 2);
     
-    // Clamp camera to level boundaries
-    float maxCameraX = (Level::LEVEL_WIDTH * 16) - VIEWPORT_WIDTH;
-    float maxCameraY = (Level::LEVEL_HEIGHT * 16) - VIEWPORT_HEIGHT;
+    // Expand camera bounds to include border areas (allow negative camera positions)
+    float maxCameraX = (Level::LEVEL_WIDTH * 16) - viewportWidth + 8;  // Extra space for borders
+    float maxCameraY = (Level::LEVEL_HEIGHT * 16) - viewportHeight + 8; // Extra space for borders
     
-    targetCameraX = std::max(0.0f, std::min(targetCameraX, maxCameraX));
-    targetCameraY = std::max(0.0f, std::min(targetCameraY, maxCameraY));
+    // Allow camera to go slightly negative to show borders
+    targetCameraX = std::max(-8.0f, std::min(targetCameraX, maxCameraX)); // Allow -32 to show left border
+    targetCameraY = std::max(-8.0f, std::min(targetCameraY, maxCameraY)); // Allow -32 to show top border
     
     // Smooth camera following
     float cameraSpeed = 8.0f;
@@ -142,22 +155,19 @@ void Game::render() {
     SDL_RenderClear(sdlRenderer);
     
     if (currentState == GameState::PLAYING) {
-        // Render frame first (background)
-        renderFrame();
-        
-        // Set viewport for level area (inside the frame)
-        SDL_Rect levelViewport = {VIEWPORT_X, VIEWPORT_Y, VIEWPORT_WIDTH, VIEWPORT_HEIGHT};
+        // Set viewport for level area using full window width and height above panel
+        SDL_Rect levelViewport = {0, 0, viewportWidth, viewportHeight};
         SDL_RenderSetViewport(sdlRenderer, &levelViewport);
         SDL_RenderSetClipRect(sdlRenderer, &levelViewport);
         
-        // Render level with camera offset
+        // Render level content within the clipped viewport
         renderLevelWithOffset();
         
-        // Reset viewport and clip
+        // Reset viewport and clip for UI elements
         SDL_RenderSetViewport(sdlRenderer, nullptr);
         SDL_RenderSetClipRect(sdlRenderer, nullptr);
         
-        // Render panel
+        // Render panel (UI layer on top)
         renderPanel();
     }
     
@@ -166,47 +176,38 @@ void Game::render() {
 }
 
 void Game::renderLevelWithOffset() {
-    // Calculate which tiles are visible
-    int startTileX = static_cast<int>(cameraX / 16);
-    int startTileY = static_cast<int>(cameraY / 16);
-    int endTileX = startTileX + (VIEWPORT_WIDTH / 16) + 2;
-    int endTileY = startTileY + (VIEWPORT_HEIGHT / 16) + 2;
+    // Calculate which tiles are visible - expand to include borders
+    int startTileX = static_cast<int>(cameraX / 16) - 2;  // Extra margin for borders
+    int startTileY = static_cast<int>(cameraY / 16) - 2;  // Extra margin for borders
+    int endTileX = startTileX + (viewportWidth / 16) + 4;   // More tiles for borders
+    int endTileY = startTileY + (viewportHeight / 16) + 4;  // More tiles for borders
     
-    // Clamp to level bounds
-    startTileX = std::max(0, startTileX);
-    startTileY = std::max(0, startTileY);
-    endTileX = std::min(Level::LEVEL_WIDTH, endTileX);
-    endTileY = std::min(Level::LEVEL_HEIGHT, endTileY);
+    // Don't clamp to level bounds - allow rendering outside level for borders
+    // startTileX = std::max(0, startTileX);
+    // startTileY = std::max(0, startTileY);
+    // endTileX = std::min(Level::LEVEL_WIDTH, endTileX);
+    // endTileY = std::min(Level::LEVEL_HEIGHT, endTileY);
     
-    // Render visible tiles with camera offset
+    // Render visible tiles and borders with camera offset
     if (currentLevel) {
         currentLevel->renderRegion(sdlRenderer, startTileX, startTileY, endTileX, endTileY, -cameraX, -cameraY);
     }
     
     // Render player with camera offset using smooth position
     if (player) {
-        float playerPixelX = player->getRenderX() * 16;
-        float playerPixelY = player->getRenderY() * 16;
+        float playerPixelX = player->getRenderX() * 16;  // Fixed back to 16
+        float playerPixelY = player->getRenderY() * 16;  // Fixed back to 16
         int playerScreenX = static_cast<int>(playerPixelX - cameraX);
         int playerScreenY = static_cast<int>(playerPixelY - cameraY);
         player->renderAt(sdlRenderer, playerScreenX, playerScreenY);
     }
 }
 
-void Game::renderFrame() {
-    SDL_Texture* frameTexture = AssetManager::getInstance().getTexture("frame");
-    if (frameTexture) {
-        // Render frame covering the entire screen
-        SDL_Rect frameRect = {0, 0, WINDOW_WIDTH, WINDOW_HEIGHT - PANEL_HEIGHT};
-        SDL_RenderCopy(sdlRenderer, frameTexture, nullptr, &frameRect);
-    }
-}
-
 void Game::renderPanel() {
     SDL_Texture* panelTexture = AssetManager::getInstance().getTexture("panel");
     if (panelTexture) {
-        // Render panel at the bottom of the screen
-        SDL_Rect panelRect = {0, WINDOW_HEIGHT - PANEL_HEIGHT, WINDOW_WIDTH, PANEL_HEIGHT};
+        // Render panel at the bottom using dynamic height
+        SDL_Rect panelRect = {0, WINDOW_HEIGHT - panelHeight, WINDOW_WIDTH, panelHeight};
         SDL_RenderCopy(sdlRenderer, panelTexture, nullptr, &panelRect);
     }
 }
