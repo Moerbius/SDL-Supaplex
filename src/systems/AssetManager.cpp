@@ -28,12 +28,6 @@ bool AssetManager::initialize(SDL_Renderer* renderer) {
         return false;
     }
     
-    // Load the frame
-    if (!loadTexture("frame", "assets/gfx/frame.png")) {
-        std::cerr << "Failed to load frame!" << std::endl;
-        return false;
-    }
-    
     return true;
 }
 
@@ -71,4 +65,24 @@ bool AssetManager::loadTexture(const std::string& name, const std::string& path)
     
     textures[name] = texture;
     return true;
+}
+
+int AssetManager::getTextureWidth(const std::string& name) {
+    SDL_Texture* texture = getTexture(name);
+    if (texture) {
+        int width;
+        SDL_QueryTexture(texture, nullptr, nullptr, &width, nullptr);
+        return width;
+    }
+    return 0;
+}
+
+int AssetManager::getTextureHeight(const std::string& name) {
+    SDL_Texture* texture = getTexture(name);
+    if (texture) {
+        int height;
+        SDL_QueryTexture(texture, nullptr, nullptr, nullptr, &height);
+        return height;
+    }
+    return 0;
 }
