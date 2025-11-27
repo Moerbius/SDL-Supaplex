@@ -16,7 +16,7 @@ private:
     SDL_Texture* texture;
     SDL_Rect srcRect;
     
-    static const int SPRITE_SIZE = 32;     // Changed from 16 to 32
+    static const int SPRITE_SIZE = 16;     // Fixed back to 16
     static const int SPRITES_PER_ROW = 16;
 };
 
