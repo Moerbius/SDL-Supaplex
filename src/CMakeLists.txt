@@ -3,7 +3,10 @@ add_executable(sdl-supaplex
     main.cpp
     game/Game.cpp
     game/Level.cpp
-    entities/Player.cpp
+    entities/MurphyObject.cpp
+    entities/GameObject.cpp
+    entities/BaseObject.cpp
+    entities/InfotronObject.cpp
     systems/AssetManager.cpp
     systems/Sprite.cpp
     systems/BorderSprite.cpp
