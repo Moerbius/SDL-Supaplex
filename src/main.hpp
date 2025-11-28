@@ -9,8 +9,8 @@
 // Forward declarations
 class Game;
 class Level;
-class Player;
 class GameObject;
+class MurphyObject;  // Add MurphyObject instead of Player
 class Renderer;
 class InputManager;
 
