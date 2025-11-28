@@ -6,7 +6,7 @@
 
 // Forward declarations
 class Level;
-class Player;
+//class Player;
 
 class Game {
 public:
@@ -33,7 +33,7 @@ private:
     
     // Game objects
     std::unique_ptr<Level> currentLevel;
-    std::unique_ptr<Player> player;
+    // Remove: std::unique_ptr<Player> player;
     
     // Camera/viewport
     float cameraX, cameraY;
