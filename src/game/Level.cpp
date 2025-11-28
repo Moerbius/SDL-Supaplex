@@ -1,36 +1,12 @@
 #include "Level.hpp"
 #include "../systems/AssetManager.hpp"
+#include <algorithm>
+#include <random>
 
-// Define static constants - match exactly what's in the header
-const int Level::LEVEL_WIDTH;
-const int Level::LEVEL_HEIGHT;
-const int Level::TILE_SIZE;
-
-const int Level::SPRITE_EMPTY;
-const int Level::SPRITE_INFOTRON;
-const int Level::SPRITE_ZONK;
-const int Level::SPRITE_TERMINAL;
-const int Level::SPRITE_BASE;
-const int Level::SPRITE_EXIT;
-const int Level::SPRITE_BUG;
-const int Level::SPRITE_SIK_SNAK;
-
-const int Level::SPRITE_BORDER_CORNERS;
-const int Level::SPRITE_BORDER_VERTICAL;
-const int Level::SPRITE_BORDER_HORIZONTAL;
-
-Level::Level() {
-    // Initialize all tiles as empty
-    for (int y = 0; y < LEVEL_HEIGHT; y++) {
-        for (int x = 0; x < LEVEL_WIDTH; x++) {
-            tiles[y][x] = TileType::EMPTY;
-        }
-    }
-    
-    // Initialize tile sprite and border sprite
+Level::Level() : murphy(nullptr) {
+    // Initialize border sprite
     SDL_Texture* spriteTexture = AssetManager::getInstance().getTexture("sprites");
     if (spriteTexture) {
-        tileSprite = Sprite(spriteTexture, SPRITE_EMPTY);
         borderSprite = BorderSprite(spriteTexture, SPRITE_BORDER_CORNERS);
     }
 }
@@ -39,69 +15,129 @@ Level::~Level() {
 }
 
 void Level::loadTestLevel() {
-    // Fill entire level with zonks
+    objects.clear();
+    murphy = nullptr;
+    
+    // Random number generation
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> dis(0.0, 1.0);
+    
+    // Fill level with randomly placed BASE and INFOTRON objects
     for (int y = 0; y < LEVEL_HEIGHT; y++) {
         for (int x = 0; x < LEVEL_WIDTH; x++) {
-            tiles[y][x] = TileType::BASE;
+            // Skip the area around Murphy's starting position (5, 10)
+            if (x >= 4 && x <= 6 && y >= 9 && y <= 11) {
+                continue; // Leave empty space around Murphy
+            }
+            
+            double random = dis(gen);
+            
+            if (random < 0.7) {
+                // 70% chance for BASE object
+                objects.push_back(std::make_unique<BaseObject>(x, y));
+            } else if (random < 0.85) {
+                // 15% chance for INFOTRON object
+                objects.push_back(std::make_unique<InfotronObject>(x, y));
+            }
+            // 15% chance for empty space (no object created)
         }
     }
     
-    // Create a small empty area around the player starting position (5, 10)
-    /* for (int y = 9; y <= 11; y++) {
-        for (int x = 4; x <= 6; x++) {
-            if (x >= 0 && x < LEVEL_WIDTH && y >= 0 && y < LEVEL_HEIGHT) {
-                tiles[y][x] = TileType::EMPTY;
-            }
-        }
-    } */
-    
-    // Add a few infotrons scattered around
-    if (7 < LEVEL_HEIGHT && 15 < LEVEL_WIDTH) tiles[7][15] = TileType::INFOTRON;
-    if (12 < LEVEL_HEIGHT && 20 < LEVEL_WIDTH) tiles[12][20] = TileType::INFOTRON;
-    if (15 < LEVEL_HEIGHT && 25 < LEVEL_WIDTH) tiles[15][25] = TileType::INFOTRON;
+    // Spawn Murphy in the cleared area
+    spawnMurphy(5, 10);
 }
 
-void Level::render(SDL_Renderer* renderer) {
-    for (int y = 0; y < LEVEL_HEIGHT; y++) {
-        for (int x = 0; x < LEVEL_WIDTH; x++) {
-            TileType tile = tiles[y][x];
-            
-            // Skip empty tiles and player tile (player renders itself)
-            if (tile == TileType::EMPTY || tile == TileType::PLAYER) {
-                continue;
-            }
-            
-            // Set appropriate sprite ID based on tile type
-            switch (tile) {
-                /* case TileType::WALL:
-                    tileSprite.setSpriteId(SPRITE_WALL);
-                    break; */
-                case TileType::INFOTRON:
-                    tileSprite.setSpriteId(SPRITE_INFOTRON);
-                    break;
-                case TileType::ZONK:
-                    tileSprite.setSpriteId(SPRITE_ZONK);
-                    break;
-                case TileType::TERMINAL:
-                    tileSprite.setSpriteId(SPRITE_TERMINAL);
-                    break;
-                case TileType::BASE:
-                    tileSprite.setSpriteId(SPRITE_BASE);
-                    break;
-                case TileType::EXIT:
-                    tileSprite.setSpriteId(SPRITE_EXIT);
-                    break;
-                case TileType::BUG:
-                    tileSprite.setSpriteId(SPRITE_BUG);
-                    break;
-                case TileType::SNIK_SNAK:
-                    tileSprite.setSpriteId(SPRITE_SIK_SNAK);
-                    break;
-                default:
-                    continue;
-            }
-            
-            tileSprite.render(renderer, x * TILE_SIZE, y * TILE_SIZE);
+void Level::spawnMurphy(int x, int y) {
+    auto murphyObj = std::make_unique<MurphyObject>(x, y);
+    murphy = murphyObj.get(); // Keep direct pointer
+    objects.push_back(std::move(murphyObj));
+}
+
+void Level::update(float deltaTime) {
+    // Process Murphy's input first
+    if (murphy && murphy->isActive()) {
+        murphy->processInput(this);
+    }
+    
+    // Update all objects
+    for (auto& object : objects) {
+        if (object && object->isActive()) {
+            object->update(deltaTime);
+        }
+    }
+    
+    // Clean up inactive objects (but check if Murphy was removed)
+    cleanupInactiveObjects();
+}
+
+GameObject* Level::getObjectAt(int x, int y) const {
+    for (const auto& object : objects) {
+        if (object && object->isActive() && object->getX() == x && object->getY() == y) {
+            return object.get();
+        }
+    }
+    return nullptr;
+}
+
+void Level::removeObjectAt(int x, int y) {
+    for (auto& object : objects) {
+        if (object && object->getX() == x && object->getY() == y) {
+            object->setActive(false);
+            break;
+        }
+    }
+}
+
+void Level::addObject(std::unique_ptr<GameObject> object) {
+    objects.push_back(std::move(object));
+}
+
+void Level::digAt(int x, int y) {
+    GameObject* obj = getObjectAt(x, y);
+    if (!obj) return;
+    
+    if (obj->getType() == ObjectType::BASE) {
+        BaseObject* baseObj = static_cast<BaseObject*>(obj);
+        baseObj->startDigging();
+    } else if (obj->getType() == ObjectType::INFOTRON) {
+        InfotronObject* infoObj = static_cast<InfotronObject*>(obj);
+        infoObj->collect();  // Revert back to collect()
+    }
+}
+
+bool Level::isWalkable(int x, int y) const {
+    if (x < 0 || x >= LEVEL_WIDTH || y < 0 || y >= LEVEL_HEIGHT) {
+        return false;
+    }
+    
+    GameObject* obj = getObjectAt(x, y);
+    if (!obj) return true; // Empty space
+    
+    // Can walk on BASE and INFOTRON (they get collected/dug)
+    // But check if infotron is already collecting
+    if (obj->getType() == ObjectType::INFOTRON) {
+        InfotronObject* infoObj = static_cast<InfotronObject*>(obj);
+        return !infoObj->isCollecting(); // Can only walk on if not already collecting
+    }
+    
+    return obj->getType() == ObjectType::BASE;
+}
+
+void Level::renderRegion(SDL_Renderer* renderer, int startX, int startY, int endX, int endY, float offsetX, float offsetY) {
+    // Render borders first
+    renderBorders(renderer, startX, startY, endX, endY, offsetX, offsetY);
+    
+    // Render all active objects in the region
+    for (const auto& object : objects) {
+        if (!object || !object->isActive()) continue;
+        
+        int objX = object->getX();
+        int objY = object->getY();
+        
+        // Check if object is in visible region
+        if (objX >= startX && objX < endX && objY >= startY && objY < endY) {
+            object->render(renderer, offsetX, offsetY);
         }
     }
 }
@@ -128,28 +164,28 @@ void Level::renderBorders(SDL_Renderer* renderer, int startX, int startY, int en
             // Determine border type and quarter based on position
             if (isLeftBorder && isTopBorder) {
                 spriteId = SPRITE_BORDER_CORNERS;
-                quarter = 0; // bottom right quarter
+                quarter = 0;
             } else if (isRightBorder && isTopBorder) {
                 spriteId = SPRITE_BORDER_CORNERS;
-                quarter = 1; // bottom left quarter
+                quarter = 1;
             } else if (isLeftBorder && isBottomBorder) {
                 spriteId = SPRITE_BORDER_CORNERS;
-                quarter = 2; // upper right quarter
+                quarter = 2;
             } else if (isRightBorder && isBottomBorder) {
                 spriteId = SPRITE_BORDER_CORNERS;
-                quarter = 3; // upper left quarter
+                quarter = 3;
             } else if (isTopBorder) {
                 spriteId = SPRITE_BORDER_HORIZONTAL;
-                quarter = 2; // top border quarter
+                quarter = 2;
             } else if (isBottomBorder) {
                 spriteId = SPRITE_BORDER_HORIZONTAL;
-                quarter = 0; // bottom border quarter
+                quarter = 0;
             } else if (isLeftBorder) {
                 spriteId = SPRITE_BORDER_VERTICAL;
-                quarter = 0; // left border quarter
+                quarter = 0;
             } else if (isRightBorder) {
                 spriteId = SPRITE_BORDER_VERTICAL;
-                quarter = 1; // right border quarter
+                quarter = 1;
             } else {
                 shouldRender = false;
             }
@@ -163,78 +199,17 @@ void Level::renderBorders(SDL_Renderer* renderer, int startX, int startY, int en
     }
 }
 
-void Level::renderRegion(SDL_Renderer* renderer, int startX, int startY, int endX, int endY, float offsetX, float offsetY) {
-    // Render borders first
-    renderBorders(renderer, startX, startY, endX, endY, offsetX, offsetY);
-    
-    // Then render level tiles (normal coordinate system)
-    for (int y = startY; y < endY; y++) {
-        for (int x = startX; x < endX; x++) {
-            // Only render tiles within the actual level bounds (60x24)
-            if (x < 0 || x >= LEVEL_WIDTH || y < 0 || y >= LEVEL_HEIGHT) {
-                continue;
-            }
-            
-            TileType tile = tiles[y][x];
-            
-            // Skip empty tiles and player tile (player renders itself)
-            if (tile == TileType::EMPTY || tile == TileType::PLAYER) {
-                continue;
-            }
-            
-            // Set appropriate sprite ID based on tile type
-            switch (tile) {
-                case TileType::BASE:
-                    tileSprite.setSpriteId(SPRITE_BASE);
-                    break;
-                case TileType::INFOTRON:
-                    tileSprite.setSpriteId(SPRITE_INFOTRON);
-                    break;
-                case TileType::ZONK:
-                    tileSprite.setSpriteId(SPRITE_ZONK);
-                    break;
-                case TileType::TERMINAL:
-                    tileSprite.setSpriteId(SPRITE_TERMINAL);
-                    break;
-                case TileType::EXIT:
-                    tileSprite.setSpriteId(SPRITE_EXIT);
-                    break;
-                case TileType::BUG:
-                    tileSprite.setSpriteId(SPRITE_BUG);
-                    break;
-                case TileType::SNIK_SNAK:
-                    tileSprite.setSpriteId(SPRITE_SIK_SNAK);
-                    break;
-                default:
-                    continue;
-            }
-            
-            int renderX = static_cast<int>((x * TILE_SIZE) + offsetX);
-            int renderY = static_cast<int>((y * TILE_SIZE) + offsetY);
-            tileSprite.render(renderer, renderX, renderY);
-        }
-    }
-}
-
-bool Level::isWalkable(int x, int y) const {
-    if (x < 0 || x >= LEVEL_WIDTH || y < 0 || y >= LEVEL_HEIGHT) {
-        return false;
+void Level::cleanupInactiveObjects() {
+    // Check if Murphy becomes inactive
+    if (murphy && !murphy->isActive()) {
+        murphy = nullptr;
     }
     
-    TileType tile = tiles[y][x];
-    // Add BASE as a walkable tile type
-    return tile == TileType::EMPTY || tile == TileType::INFOTRON || tile == TileType::BASE;
-}
-
-TileType Level::getTile(int x, int y) const {
-    if (x < 0 || x >= LEVEL_WIDTH || y < 0 || y >= LEVEL_HEIGHT) {
-        return TileType::HARDWARE_8; // Non-walkable default
-    }
-    return tiles[y][x];
-}
-
-void Level::setTile(int x, int y, TileType type) {
-    if (x >= 0 && x < LEVEL_WIDTH && y >= 0 && y < LEVEL_HEIGHT) {
-        tiles[y][x] = type;
-    }
+    // Remove inactive objects
+    objects.erase(
+        std::remove_if(objects.begin(), objects.end(),
+            [](const std::unique_ptr<GameObject>& obj) {
+                return !obj || !obj->isActive();
+            }),
+        objects.end());
 }
