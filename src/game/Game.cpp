@@ -1,6 +1,5 @@
 #include "Game.hpp"
 #include "Level.hpp"
-#include "../entities/Player.hpp"
 #include "../systems/AssetManager.hpp"
 #include <chrono>
 #include <algorithm>
@@ -70,8 +69,6 @@ bool Game::initialize() {
     currentLevel = std::make_unique<Level>();
     currentLevel->loadTestLevel();
     
-    player = std::make_unique<Player>(5, 10); // Starting position
-    
     std::cout << "Game initialized successfully!" << std::endl;
     return true;
 }
@@ -107,8 +104,11 @@ void Game::handleEvents() {
             case SDL_KEYDOWN:
                 if (event.key.keysym.sym == SDLK_ESCAPE) {
                     isRunning = false;
-                } else if (currentState == GameState::PLAYING && player) {
-                    player->handleInput(event, currentLevel.get());
+                } else if (currentState == GameState::PLAYING && currentLevel) {
+                    MurphyObject* murphy = currentLevel->getMurphy();
+                    if (murphy) {
+                        murphy->handleInput(event, currentLevel.get());
+                    }
                 }
                 break;
         }
@@ -117,19 +117,22 @@ void Game::handleEvents() {
 
 void Game::update(float deltaTime) {
     if (currentState == GameState::PLAYING) {
-        if (player && currentLevel) {
-            player->update(deltaTime, currentLevel.get());
-            updateCamera(deltaTime);  // Pass deltaTime to updateCamera
+        if (currentLevel) {
+            currentLevel->update(deltaTime);
+            updateCamera(deltaTime);
         }
     }
 }
 
 void Game::updateCamera(float deltaTime) {
-    if (!player) return;
+    if (!currentLevel) return;
     
-    // Use smooth player position for camera
-    float playerPixelX = player->getRenderX() * 16;
-    float playerPixelY = player->getRenderY() * 16;
+    MurphyObject* murphy = currentLevel->getMurphy();
+    if (!murphy) return;
+    
+    // Use Murphy's position for camera
+    float playerPixelX = murphy->getRenderX() * 16;
+    float playerPixelY = murphy->getRenderY() * 16;
     
     // Center camera on player using dynamic viewport
     float targetCameraX = playerPixelX - (viewportWidth / 2);
@@ -192,15 +195,6 @@ void Game::renderLevelWithOffset() {
     if (currentLevel) {
         currentLevel->renderRegion(sdlRenderer, startTileX, startTileY, endTileX, endTileY, -cameraX, -cameraY);
     }
-    
-    // Render player with camera offset using smooth position
-    if (player) {
-        float playerPixelX = player->getRenderX() * 16;  // Fixed back to 16
-        float playerPixelY = player->getRenderY() * 16;  // Fixed back to 16
-        int playerScreenX = static_cast<int>(playerPixelX - cameraX);
-        int playerScreenY = static_cast<int>(playerPixelY - cameraY);
-        player->renderAt(sdlRenderer, playerScreenX, playerScreenY);
-    }
 }
 
 void Game::renderPanel() {
@@ -214,7 +208,6 @@ void Game::renderPanel() {
 
 void Game::cleanup() {
     // Unique pointers will automatically clean up
-    player.reset();
     currentLevel.reset();
     
     // Clean up AssetManager
