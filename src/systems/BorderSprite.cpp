@@ -12,7 +12,6 @@ void BorderSprite::setSpriteId(int spriteId) {
     int col = spriteId % SPRITES_PER_ROW;
     int row = spriteId / SPRITES_PER_ROW;
     
-    // Set base position for the 16x16 sprite
     srcRect.x = col * SPRITE_SIZE;
     srcRect.y = row * SPRITE_SIZE;
     srcRect.w = QUARTER_SIZE;
@@ -25,7 +24,6 @@ void BorderSprite::setQuarterSrcRect(int spriteId, int quarter) {
     int baseX = col * SPRITE_SIZE;
     int baseY = row * SPRITE_SIZE;
     
-    // Map quarter numbers to positions: 0=bottom right, 1=bottom left, 2=upper right, 3=upper left
     switch (quarter) {
         case 0: // Bottom right
             srcRect.x = baseX + QUARTER_SIZE;
@@ -54,13 +52,9 @@ void BorderSprite::setQuarterSrcRect(int spriteId, int quarter) {
 }
 
 void BorderSprite::renderWithSprite(SDL_Renderer* renderer, int x, int y, int spriteId, int quarter) {
-    if (!texture) {
-        return;
-    }
+    if (!texture) return;
     
     setQuarterSrcRect(spriteId, quarter);
-    
-    // Render the 8x8 quarter at 16x16 size to match game scale
     SDL_Rect dstRect = {x, y, 16, 16};
     SDL_RenderCopy(renderer, texture, &srcRect, &dstRect);
 }
