@@ -10,7 +10,7 @@ MurphyObject::MurphyObject(int startX, int startY)
       frameDuration(ANIMATION_SPEED), isAnimating(false), idleSprite(MURPHY_IDLE),
       pendingMoveX(0), pendingMoveY(0), facingDirection(FacingDirection::IDLE),
       isDigging(false), hasPendingObjectRemoval(false), pendingRemovalX(0), 
-      pendingRemovalY(0), pendingLevel(nullptr) {
+      pendingRemovalY(0), pendingLevel(nullptr), previousX(startX), previousY(startY) {
     
     setSpriteId(MURPHY_IDLE);
 }
@@ -23,8 +23,9 @@ void MurphyObject::update(float deltaTime) {
 void MurphyObject::render(SDL_Renderer* renderer, float offsetX, float offsetY) {
     if (!active) return;
     
-    int pixelX = static_cast<int>((renderX * TILE_SIZE) + offsetX);
-    int pixelY = static_cast<int>((renderY * TILE_SIZE) + offsetY);
+    // Use smooth renderX/Y for movement, but ensure pixel-perfect positioning
+    int pixelX = static_cast<int>(roundf((renderX * TILE_SIZE) + offsetX));
+    int pixelY = static_cast<int>(roundf((renderY * TILE_SIZE) + offsetY));
     sprite.render(renderer, pixelX, pixelY);
 }
 
@@ -105,11 +106,8 @@ void MurphyObject::move(int dx, int dy, Level* level) {
         
         if (obj) {
             if (obj->getType() == ObjectType::INFOTRON) {
-                InfotronObject* infoObj = static_cast<InfotronObject*>(obj);
-                if (!infoObj->isCollecting()) {
-                    // Only collect if not already collecting
-                    level->digAt(newX, newY);
-                }
+                // Collect infotron immediately
+                level->digAt(newX, newY);
             } else if (obj->getType() == ObjectType::BASE) {
                 hasPendingObjectRemoval = true;
                 pendingRemovalX = newX;
@@ -118,12 +116,17 @@ void MurphyObject::move(int dx, int dy, Level* level) {
             }
         }
         
+        // Store previous position before moving
+        previousX = x;
+        previousY = y;
+        
         x = newX;
         y = newY;
         
         targetX = static_cast<float>(newX);
         targetY = static_cast<float>(newY);
         moving = true;
+        pendingLevel = level;  // Store level reference for gravity callback
         
         if (dx == -1) {
             startAnimation({MURPHY_LEFT_1, MURPHY_LEFT_2, MURPHY_LEFT_3, MURPHY_LEFT_2, MURPHY_LEFT_1}, ANIMATION_SPEED);
@@ -209,7 +212,12 @@ void MurphyObject::updateMovement(float deltaTime) {
         if (hasPendingObjectRemoval && pendingLevel) {
             pendingLevel->removeObjectAt(pendingRemovalX, pendingRemovalY);
             hasPendingObjectRemoval = false;
-            pendingLevel = nullptr;
+        }
+        
+        // Trigger gravity check for the tile Murphy just left (only after movement is complete)
+        if (pendingLevel) {
+            pendingLevel->triggerGravityCheckAbove(previousX, previousY);
+            pendingLevel = nullptr;  // Clear the reference
         }
     } else {
         float normalizedDx = dx / distanceToTarget;
