@@ -1,5 +1,6 @@
 #include "Game.hpp"
 #include "Level.hpp"
+#include "LevelLoader.hpp"
 #include "../systems/AssetManager.hpp"
 #include <chrono>
 #include <algorithm>
@@ -65,9 +66,18 @@ bool Game::initialize() {
     viewportWidth = WINDOW_WIDTH;
     viewportHeight = WINDOW_HEIGHT - panelHeight;
     
-    // Initialize game objects
+    // Load levels file and initialize level
     currentLevel = std::make_unique<Level>();
-    currentLevel->loadTestLevel();
+    if (!LevelLoader::loadLevelsFile("assets/LEVELS.DAT")) {
+        std::cerr << "Failed to load levels file! Falling back to test level." << std::endl;
+        currentLevel->loadTestLevel();
+    } else {
+        // Load level 1
+        if (!currentLevel->loadFromFile(1)) {
+            std::cerr << "Failed to load level 1! Using test level." << std::endl;
+            currentLevel->loadTestLevel();
+        }
+    }
     
     std::cout << "Game initialized successfully!" << std::endl;
     return true;
@@ -138,18 +148,25 @@ void Game::updateCamera(float deltaTime) {
     float targetCameraX = playerPixelX - (viewportWidth / 2);
     float targetCameraY = playerPixelY - (viewportHeight / 2);
     
+    // Remove the camera shift - we're shifting the level data instead
+    // targetCameraY += 16;
+    
     // Expand camera bounds to include border areas (allow negative camera positions)
     float maxCameraX = (Level::LEVEL_WIDTH * 16) - viewportWidth + 8;  // Extra space for borders
     float maxCameraY = (Level::LEVEL_HEIGHT * 16) - viewportHeight + 8; // Extra space for borders
     
     // Allow camera to go slightly negative to show borders
-    targetCameraX = std::max(-8.0f, std::min(targetCameraX, maxCameraX)); // Allow -32 to show left border
-    targetCameraY = std::max(-8.0f, std::min(targetCameraY, maxCameraY)); // Allow -32 to show top border
+    targetCameraX = std::max(-8.0f, std::min(targetCameraX, maxCameraX));
+    targetCameraY = std::max(-8.0f, std::min(targetCameraY, maxCameraY));  // Remove shift adjustment
     
     // Smooth camera following
     float cameraSpeed = 8.0f;
     cameraX += (targetCameraX - cameraX) * cameraSpeed * deltaTime;
     cameraY += (targetCameraY - cameraY) * cameraSpeed * deltaTime;
+    
+    // PIXEL-ALIGN THE CAMERA - this prevents the black lines
+    cameraX = roundf(cameraX);
+    cameraY = roundf(cameraY);
 }
 
 void Game::render() {
