@@ -1,4 +1,5 @@
 #include "Level.hpp"
+#include "LevelLoader.hpp"
 #include "../systems/AssetManager.hpp"
 #include <algorithm>
 #include <random>
@@ -12,6 +13,15 @@ Level::Level() : murphy(nullptr) {
 }
 
 Level::~Level() {
+}
+
+bool Level::loadFromFile(int levelNumber) {
+    return LevelLoader::loadLevel(this, levelNumber);
+}
+
+void Level::clearAllObjects() {
+    objects.clear();
+    murphy = nullptr;
 }
 
 void Level::loadTestLevel() {
@@ -54,21 +64,67 @@ void Level::spawnMurphy(int x, int y) {
     objects.push_back(std::move(murphyObj));
 }
 
+void Level::moveObject(GameObject* obj, int newX, int newY) {
+    if (!obj) return;
+    
+    // Update the object's position
+    obj->setPosition(newX, newY);
+}
+
 void Level::update(float deltaTime) {
+    // Store positions of objects that will be removed this frame (for digging)
+    std::vector<std::pair<int, int>> removedPositions;
+    
     // Process Murphy's input first
     if (murphy && murphy->isActive()) {
         murphy->processInput(this);
     }
     
-    // Update all objects
+    // Update all objects and provide level reference for zonks
     for (auto& object : objects) {
         if (object && object->isActive()) {
+            bool wasActive = object->isActive();
+            
+            // Give zonks access to the level for gravity checks
+            if (object->getType() == ObjectType::ZONK) {
+                ZonkObject* zonk = static_cast<ZonkObject*>(object.get());
+                zonk->setLevel(this);
+            }
+            
             object->update(deltaTime);
+            
+            // Check if object became inactive this frame (from digging, not Murphy movement)
+            if (wasActive && !object->isActive() && object->getType() != ObjectType::PLAYER) {
+                removedPositions.push_back({object->getX(), object->getY()});
+            }
         }
     }
     
-    // Clean up inactive objects (but check if Murphy was removed)
+    // Clean up inactive objects
     cleanupInactiveObjects();
+    
+    // Trigger gravity checks only for objects removed by digging, not Murphy movement
+    for (const auto& pos : removedPositions) {
+        triggerGravityCheckAbove(pos.first, pos.second);
+    }
+}
+
+void Level::triggerGravityCheckAbove(int x, int y) {
+    // Check all objects above this position for zonks that might need to fall
+    for (int checkY = y - 1; checkY >= 0; checkY--) {
+        GameObject* obj = getObjectAt(x, checkY);
+        if (obj && obj->getType() == ObjectType::ZONK) {
+            ZonkObject* zonk = static_cast<ZonkObject*>(obj);
+            if (!zonk->isFalling()) {
+                // Force an immediate gravity check
+                zonk->setLevel(this);
+                zonk->forceGravityCheck();
+            }
+        } else if (obj) {
+            // Hit a solid object, no need to check further up
+            break;
+        }
+    }
 }
 
 GameObject* Level::getObjectAt(int x, int y) const {
@@ -102,7 +158,10 @@ void Level::digAt(int x, int y) {
         baseObj->startDigging();
     } else if (obj->getType() == ObjectType::INFOTRON) {
         InfotronObject* infoObj = static_cast<InfotronObject*>(obj);
-        infoObj->collect();  // Revert back to collect()
+        infoObj->collect();
+    } else if (obj->getType() == ObjectType::CHIP_1) {
+        ChipObject* chipObj = static_cast<ChipObject*>(obj);
+        chipObj->collect();
     }
 }
 
@@ -115,35 +174,49 @@ bool Level::isWalkable(int x, int y) const {
     if (!obj) return true; // Empty space
     
     // Can walk on BASE and INFOTRON (they get collected/dug)
-    // But check if infotron is already collecting
-    if (obj->getType() == ObjectType::INFOTRON) {
-        InfotronObject* infoObj = static_cast<InfotronObject*>(obj);
-        return !infoObj->isCollecting(); // Can only walk on if not already collecting
+    // Zonks block movement (solid objects), but check if they're rolling
+    if (obj->getType() == ObjectType::ZONK) {
+        ZonkObject* zonk = static_cast<ZonkObject*>(obj);
+        return zonk->isRolling(); // Can walk through rolling zonks
     }
     
-    return obj->getType() == ObjectType::BASE;
+    return obj->getType() == ObjectType::BASE || 
+           obj->getType() == ObjectType::INFOTRON;
 }
 
 void Level::renderRegion(SDL_Renderer* renderer, int startX, int startY, int endX, int endY, float offsetX, float offsetY) {
     // Render borders first
     renderBorders(renderer, startX, startY, endX, endY, offsetX, offsetY);
     
-    // Render all active objects in the region
-    for (const auto& object : objects) {
-        if (!object || !object->isActive()) continue;
+    // Then render level tiles
+    for (int y = startY; y < endY; y++) {
+        for (int x = startX; x < endX; x++) {
+            // Only render tiles within the actual level bounds (58x22)
+            if (x < 0 || x >= LEVEL_WIDTH || y < 0 || y >= LEVEL_HEIGHT) {
+                continue;
+            }
+            
+            GameObject* obj = getObjectAt(x, y);
+            if (obj && obj->isActive()) {
+                obj->render(renderer, offsetX, offsetY);
+            }
+        }
+    }
+    
+    // Ensure Murphy renders separately if he wasn't caught in the tile loop
+    if (murphy && murphy->isActive()) {
+        int murphyX = murphy->getX();
+        int murphyY = murphy->getY();
         
-        int objX = object->getX();
-        int objY = object->getY();
-        
-        // Check if object is in visible region
-        if (objX >= startX && objX < endX && objY >= startY && objY < endY) {
-            object->render(renderer, offsetX, offsetY);
+        // Always render Murphy if he's in the visible region
+        if (murphyX >= startX && murphyX < endX && murphyY >= startY && murphyY < endY) {
+            murphy->render(renderer, offsetX, offsetY);
         }
     }
 }
 
 void Level::renderBorders(SDL_Renderer* renderer, int startX, int startY, int endX, int endY, float offsetX, float offsetY) {
-    // Render borders for positions outside the 60x24 level area
+    // Render borders for positions outside the 58x22 level area
     for (int y = startY; y < endY; y++) {
         for (int x = startX; x < endX; x++) {
             // Only render borders outside the level bounds
