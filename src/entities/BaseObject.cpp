@@ -17,9 +17,12 @@ void BaseObject::update(float deltaTime) {
             currentFrame++;
             
             if (currentFrame >= static_cast<int>(DIGGING_SPRITES.size())) {
-                // Animation complete
+                // Animation complete - BASE is now fully removed
                 animating = false;
                 setActive(false);
+                
+                // Trigger immediate gravity check for zonks above this position
+                // This will be handled by the level's cleanup system
             } else {
                 setSpriteId(DIGGING_SPRITES[currentFrame]);
             }
