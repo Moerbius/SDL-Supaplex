@@ -1,12 +1,15 @@
 # Create executable
 add_executable(sdl-supaplex 
     main.cpp
-    game/Game.cpp
     game/Level.cpp
+    game/Game.cpp
+    game/LevelLoader.cpp
     entities/MurphyObject.cpp
     entities/GameObject.cpp
     entities/BaseObject.cpp
     entities/InfotronObject.cpp
+    entities/ZonkObject.cpp
+    entities/ChipObject.cpp
     systems/AssetManager.cpp
     systems/Sprite.cpp
     systems/BorderSprite.cpp
