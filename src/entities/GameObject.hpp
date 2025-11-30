@@ -13,7 +13,31 @@ enum class ObjectType {
     TERMINAL,
     EXIT,
     BUG,
-    SNIK_SNAK
+    SNIK_SNAK,
+    
+    // Add missing types referenced in LevelLoader
+    CHIP_1,
+    CHIP_2, 
+    CHIP_3,
+    
+    HARDWARE_1,
+    HARDWARE_2,
+    HARDWARE_3,
+    HARDWARE_4,
+    HARDWARE_5,
+    HARDWARE_6,
+    HARDWARE_7,
+    HARDWARE_8,
+    HARDWARE_9,
+    HARDWARE_10,
+    
+    DISK_ORANGE,
+    DISK_YELLOW,
+    DISK_RED,
+    
+    PORT_1,
+    PORT_2,
+    PORT_3
 };
 
 class GameObject {
