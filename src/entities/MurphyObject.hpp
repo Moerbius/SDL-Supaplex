@@ -54,6 +54,9 @@ private:
     int pendingRemovalX, pendingRemovalY;
     Level* pendingLevel;
     
+    // Add movement tracking for gravity triggers
+    int previousX, previousY;  // Track where Murphy was before moving
+    
     static const int MURPHY_IDLE = 3;
     static const int MURPHY_LEFT_1 = 8;
     static const int MURPHY_LEFT_2 = 9;
@@ -69,7 +72,7 @@ private:
     static const int MURPHY_DIG_RIGHT = 24;
     
     static constexpr float ANIMATION_SPEED = 0.15f;
-    static constexpr float MOVE_SPEED = 4.0f;
+    static constexpr float MOVE_SPEED = 8.0f;  // Changed from 4.0f to 8.0f to match zonk fall speed
 };
 
 #endif // MURPHYOBJECT_HPP
